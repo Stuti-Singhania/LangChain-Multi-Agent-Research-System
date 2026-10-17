@@ -308,7 +308,7 @@ details summary {
 
 
 # ── Helper: render a step card ────────────────────────────────────────────────
-def step_card(num: str, title: str, state: str, desc: str = ""):
+def step_card(num: str, title: str, state: str, desc: str = "", slot=None):
     status_map = {
         "waiting": ("WAITING", "status-waiting"),
         "running": ("● RUNNING", "status-running"),
@@ -318,7 +318,8 @@ def step_card(num: str, title: str, state: str, desc: str = ""):
     label, cls = status_map.get(state, ("", ""))
     card_cls = {"running": "active", "done": "done"}.get(state, "")
 
-    st.markdown(f"""
+    target = slot if slot is not None else st
+    target.markdown(f"""
     <div class="step-card {card_cls}">
         <div class="step-header">
             <span class="step-num">{num}</span>
@@ -331,6 +332,10 @@ def step_card(num: str, title: str, state: str, desc: str = ""):
 
 
 # ── Session state init ────────────────────────────────────────────────────────
+def select_example_topic(topic: str) -> None:
+    st.session_state.topic_input = topic
+
+
 for key in ("results", "running", "done"):
     if key not in st.session_state:
         st.session_state[key] = {} if key == "results" else False
@@ -356,8 +361,6 @@ col_input, col_spacer, col_pipeline = st.columns([5, 0.5, 4])
 
 with col_input:
 
-    st.markdown('<div class="input-card">', unsafe_allow_html=True)
-
     topic = st.text_input(
         "Research Topic",
         placeholder="e.g. Roadmap for AGI development in next 5 years",
@@ -370,39 +373,27 @@ with col_input:
         use_container_width=True
     )
 
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Example chips
-    st.markdown("""
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.5rem;">
-        <span style="font-family:'DM Mono',monospace;font-size:0.68rem;color:#7f93ad;letter-spacing:0.1em;">
-            TRY →
-        </span>
-    """, unsafe_allow_html=True)
+    # Interactive example topics
+    st.markdown("**Try a sample topic**")
 
     examples = [
-        "Future of LLM in Tech Industry",
-        "All Lastest AI Agents in 2026",
-        "Roadmap for AGI development in next 5 years",
+        "Latest developments in multi-agent AI systems in 2026",
+        "Generative AI applications in software engineering",
+        "Roadmap and challenges toward AGI over the next five years",
     ]
 
-    for ex in examples:
-        st.markdown(f"""
-        <span style="
-            background:rgba(255,255,255,0.05);
-            border:1px solid rgba(255,255,255,0.08);
-            border-radius:8px;
-            padding:0.35rem 0.8rem;
-            font-size:0.75rem;
-            color:#d8e2f0;
-            font-family:'DM Sans',sans-serif;
-            cursor:default;
-        ">
-            {ex}
-        </span>
-        """, unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
+    example_cols = st.columns(2)
+    for i, example in enumerate(examples):
+        with example_cols[i % 2]:
+            st.button(
+                example,
+                key=f"example_topic_{i}",
+                on_click=select_example_topic,
+                args=(example,),
+                use_container_width=True,
+            )
+    progress_placeholder = st.empty()
 
 with col_pipeline:
 
@@ -410,6 +401,13 @@ with col_pipeline:
         '<div class="section-heading">Pipeline</div>',
         unsafe_allow_html=True
     )
+
+    pipeline_slots = {
+        "search": st.empty(),
+        "reader": st.empty(),
+        "writer": st.empty(),
+        "critic": st.empty(),
+    }
 
     r = st.session_state.results
     done = st.session_state.done
@@ -431,33 +429,13 @@ with col_pipeline:
 
         return "waiting"
 
-    step_card(
-        "01",
-        "Search Agent",
-        s("search"),
-        "Gathers recent web information"
-    )
+    step_card("01", "Search Agent", s("search"), "Gathers recent web information", slot=pipeline_slots["search"])
 
-    step_card(
-        "02",
-        "Reader Agent",
-        s("reader"),
-        "Scrapes & extracts deep content"
-    )
+    step_card("02", "Reader Agent", s("reader"), "Scrapes & extracts deep content", slot=pipeline_slots["reader"])
 
-    step_card(
-        "03",
-        "Writer Chain",
-        s("writer"),
-        "Drafts the full research report"
-    )
+    step_card("03", "Writer Chain", s("writer"), "Drafts the full research report", slot=pipeline_slots["writer"])
 
-    step_card(
-        "04",
-        "Critic Chain",
-        s("critic"),
-        "Reviews & scores the report"
-    )
+    step_card("04", "Critic Chain", s("critic"), "Reviews & scores the report", slot=pipeline_slots["critic"])
 
 
 # ── Run pipeline ──────────────────────────────────────────────────────────────
@@ -479,60 +457,78 @@ if st.session_state.running and not st.session_state.done:
     topic_val = st.session_state.topic_input
 
     # ── Step 1: Search ──
-    with st.spinner("🔍 Search Agent is working…"):
+    with progress_placeholder.container():
+        with st.spinner("🔍 Search Agent is working…"):
 
-        search_agent = build_search_agent()
+            search_agent = build_search_agent()
 
-        sr = search_agent.invoke({
-            "messages": [
-                ("user",
-                 f"Find recent, reliable and detailed information about: {topic_val}")
-            ]
-        })
+            sr = search_agent.invoke({
+                "messages": [
+                    ("user",
+                    f"Find recent, reliable and detailed information about: {topic_val}")
+                ]
+            })
 
-        results["search"] = sr["messages"][-1].content
-        st.session_state.results = dict(results)
+            results["search"] = sr["messages"][-1].content
+            st.session_state.results = dict(results)
+            step_card("01", "Search Agent", "done",
+                    "Gathers recent web information", slot=pipeline_slots["search"])
+            step_card("02", "Reader Agent", "running",
+                    "Scrapes & extracts deep content", slot=pipeline_slots["reader"])
 
     # ── Step 2: Reader ──
-    with st.spinner("📄 Reader Agent is scraping top resources…"):
+    with progress_placeholder.container():
+        with st.spinner("📄 Reader Agent is scraping top resources…"):
 
-        reader_agent = build_reader_agent()
+            reader_agent = build_reader_agent()
 
-        rr = reader_agent.invoke({
-            "messages": [(
-                "user",
-                f"Based on the following search results about '{topic_val}', "
-                f"pick the most relevant URL and scrape it for deeper content.\n\n"
-                f"Search Results:\n{results['search'][:800]}"
-            )]
-        })
+            rr = reader_agent.invoke({
+                "messages": [(
+                    "user",
+                    f"Based on the following search results about '{topic_val}', "
+                    f"pick the most relevant URL and scrape it for deeper content.\n\n"
+                    f"Search Results:\n{results['search'][:800]}"
+                )]
+            })
 
-        results["reader"] = rr["messages"][-1].content
-        st.session_state.results = dict(results)
+            results["reader"] = rr["messages"][-1].content
+            st.session_state.results = dict(results)
+            step_card("02", "Reader Agent", "done",
+                    "Scrapes & extracts deep content", slot=pipeline_slots["reader"])
+            step_card("03", "Writer Chain", "running",
+                    "Drafts the full research report", slot=pipeline_slots["writer"])
 
     # ── Step 3: Writer ──
-    with st.spinner("✍️ Writer is drafting the report…"):
+    with progress_placeholder.container():
+        with st.spinner("✍️ Writer is drafting the report…"):
 
-        research_combined = (
-            f"SEARCH RESULTS:\n{results['search']}\n\n"
-            f"DETAILED SCRAPED CONTENT:\n{results['reader']}"
-        )
+            research_combined = (
+                f"SEARCH RESULTS:\n{results['search']}\n\n"
+                f"DETAILED SCRAPED CONTENT:\n{results['reader']}"
+            )
 
-        results["writer"] = writer_chain.invoke({
-            "topic": topic_val,
-            "research": research_combined
-        })
+            results["writer"] = writer_chain.invoke({
+                "topic": topic_val,
+                "research": research_combined
+            })
 
-        st.session_state.results = dict(results)
+            st.session_state.results = dict(results)
+            step_card("03", "Writer Chain", "done",
+                    "Drafts the full research report", slot=pipeline_slots["writer"])
+            step_card("04", "Critic Chain", "running",
+                    "Reviews & scores the report", slot=pipeline_slots["critic"])
 
     # ── Step 4: Critic ──
-    with st.spinner("🧐 Critic is reviewing the report…"):
+    with progress_placeholder.container():
+        with st.spinner("🧐 Critic is reviewing the report…"):
 
-        results["critic"] = critic_chain.invoke({
-            "report": results["writer"]
-        })
+            results["critic"] = critic_chain.invoke({
+                "report": results["writer"]
+            })
 
-        st.session_state.results = dict(results)
+            st.session_state.results = dict(results)
+            step_card("04", "Critic Chain", "done",
+                    "Reviews & scores the report", slot=pipeline_slots["critic"])
 
     st.session_state.running = False
     st.session_state.done = True
