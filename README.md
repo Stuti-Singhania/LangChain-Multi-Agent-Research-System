@@ -8,6 +8,13 @@ A powerful multi-agent research system built with LangChain that autonomously re
 
 ---
 
+## 🚀 Live Demo
+
+Try the deployed application here:
+**[LangChain Multi-Agent Research System](https://langchain-multi-agent-research-system-dsg3.onrender.com/)**
+
+Built with LangChain, Groq (GPT-OSS-20B), Tavily, and Streamlit.
+
 ## 🌟 Features
 
 - **Multi-Agent Architecture**: Specialized agents for searching, reading, writing, and critiquing
