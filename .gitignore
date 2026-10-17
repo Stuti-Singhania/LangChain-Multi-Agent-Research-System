@@ -218,3 +218,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+.env.txt
+
+.env
+.env.*
+!.env.example
+README.local-backup.md
